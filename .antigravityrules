@@ -1,0 +1,31 @@
+# SoundPass — Engine & Code Rules (.antigravityrules)
+# Standar: Laravel 11.x | PHP 8.3+ (Strict Types: declare(strict_types=1);)
+
+# 1. ANTI-AI SLOP & CONCRETE IMPLEMENTATION
+- STRICT: Dilarang keras menulis placeholder, stub kosong, atau komentar seperti "// implement here" / "// tambahkan logika di sini".
+- Semua implementasi harus konkret, lengkap, siap dieksekusi, dan valid secara sintaksis.
+- Tanpa komentar berulang/fluff (misal: "// save model: $model->save()"). Komentar hanya untuk logika bisnis kompleks (seperti pessimistic locking).
+- Hindari wrapper/helper function semu jika PHP atau Laravel sudah menyediakannya secara native.
+
+# 2. TYPE SAFETY & SINGLE SOURCE OF TRUTH (SSOT)
+- Gunakan PHP 8.3+ Strict Types (`declare(strict_types=1);`) di setiap file PHP baru (Actions, Requests, Controllers, Enums, Models).
+- Status transaksi wajib menggunakan PHP Backed Enum: `App\Enums\BookingStatus` (PENDING = 'pending', CONFIRMED = 'confirmed', CANCELLED = 'cancelled'), DILARANG menggunakan raw string bebas.
+
+# 3. CONTROLLERS & FORM REQUESTS
+- Controller harus tetap ramping (skinny controller).
+- Validasi input WAJIB menggunakan dedicated Form Request (`StoreBookingRequest`), jangan menumpuk validasi di controller.
+- Gunakan Explicit Route Model Binding (`{concert:slug}`, `{booking:booking_code}`) dan penamaan route konsisten (`concerts.*`, `bookings.*`).
+
+# 4. DATABASE TRANSACTIONS & CONCURRENCY CONTROL
+- Logika mutasi tiket (pengurangan kuota tiket dan kalkulasi biaya) WAJIB dieksekusi dalam `DB::transaction()`.
+- Wajib menggunakan Pessimistic Locking (`lockForUpdate()`) pada baris `TicketTier` yang dipesan untuk mencegah race condition dan overbooking.
+- Cek ketersediaan kuota (`remaining_quota >= quantity`) di dalam transaksi terkunci. Jika tidak mencukupi, lempar `QuotaExceededException`.
+- Kolom kuota `remaining_quota` di database wajib memiliki check constraint `CHECK (remaining_quota >= 0)`.
+
+# 5. ELOQUENT & PERFORMANCE
+- Wajib mendefinisikan Eloquent Relationship secara eksplisit (`hasMany`, `belongsTo`, dll).
+- Selalu gunakan Eager Loading (`with()`) untuk mencegah N+1 query problem pada pemanggilan relasi concert, ticket tiers, dan booking details.
+
+# 6. EXCEPTION HANDLING & UX SAFETY
+- Tangkap `TokenMismatchException` (419 Page Expired) pada `bootstrap/app.php` dan arahkan kembali (`redirect()->back()->withInput($request->except('_token'))`) disertai flash message peringatan sesi.
+- Proteksi akses e-ticket: hanya pemilik akun yang terautentikasi atau sesi browser dengan kode booking aktif (`session('authorized_bookings')`) yang berhak melihat e-ticket.
